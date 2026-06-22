@@ -44,7 +44,6 @@ ALLOWED_EXTENSIONS = {
     ".html", ".htm", ".xml", ".json",
     ".txt", ".md", ".rst", ".tex", ".epub",
     ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp",
-    ".mp3", ".wav",
     ".zip",
 }
 
@@ -64,7 +63,6 @@ START_TEXT = (
     "• Веб / разметка: HTML, HTM, XML, JSON\n"
     "• Текст: TXT\n"
     "• Изображения (OCR): JPG, PNG, GIF, BMP, TIFF\n"
-    "• Аудио (транскрипция): MP3, WAV\n"
     "• Архивы: ZIP\n\n"
     "Просто пришли мне файл или фото!"
 )
