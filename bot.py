@@ -87,18 +87,15 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         loop = asyncio.get_running_loop()
         markdown = await loop.run_in_executor(None, converter.convert, tmp_path)
 
-        if len(markdown) <= 4096:
-            await progress_msg.edit_text(markdown)
-        else:
-            Path(out_path).write_text(markdown, encoding="utf-8")
-            await progress_msg.edit_text("✅ Готово! Отправляю файл...")
-            with open(out_path, "rb") as f:
-                await update.message.reply_document(
-                    document=f,
-                    filename=stem + ".md",
-                    caption="✅ Конвертация завершена.",
-                )
-            await progress_msg.delete()
+        Path(out_path).write_text(markdown, encoding="utf-8")
+        await progress_msg.edit_text("✅ Готово! Отправляю файл...")
+        with open(out_path, "rb") as f:
+            await update.message.reply_document(
+                document=f,
+                filename=stem + ".md",
+                caption="✅ Конвертация завершена.",
+            )
+        await progress_msg.delete()
     except Exception as e:
         logger.exception("Error processing document %s", original_name)
         try:
@@ -132,18 +129,15 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         loop = asyncio.get_running_loop()
         markdown = await loop.run_in_executor(None, converter.convert, tmp_path)
 
-        if len(markdown) <= 4096:
-            await progress_msg.edit_text(markdown)
-        else:
-            Path(out_path).write_text(markdown, encoding="utf-8")
-            await progress_msg.edit_text("✅ Готово! Отправляю файл...")
-            with open(out_path, "rb") as f:
-                await update.message.reply_document(
-                    document=f,
-                    filename="photo.md",
-                    caption="✅ OCR завершён.",
-                )
-            await progress_msg.delete()
+        Path(out_path).write_text(markdown, encoding="utf-8")
+        await progress_msg.edit_text("✅ Готово! Отправляю файл...")
+        with open(out_path, "rb") as f:
+            await update.message.reply_document(
+                document=f,
+                filename="photo.md",
+                caption="✅ OCR завершён.",
+            )
+        await progress_msg.delete()
     except Exception as e:
         logger.exception("Error processing photo")
         try:
