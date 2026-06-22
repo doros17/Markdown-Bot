@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import tempfile
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -28,41 +27,38 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE_MB", "50")) * 1024 * 1024
 TEMP_DIR = os.getenv("TEMP_DIR", "/tmp/markdown_bot")
 
-SUPPORTED_FORMATS = (
-    "📄 *Поддерживаемые форматы:*\n\n"
-    "• *Документы:* PDF, DOCX, DOC, ODT, RTF\n"
-    "• *Презентации:* PPTX, PPT, ODP\n"
-    "• *Таблицы:* XLSX, XLS, ODS, CSV\n"
-    "• *Веб / разметка:* HTML, HTM, XML, JSON\n"
-    "• *Текст:* TXT\n"
-    "• *Изображения (OCR):* JPG, PNG, GIF, BMP, TIFF\n"
-    "• *Аудио (транскрипция):* MP3, WAV\n"
-    "• *Архивы:* ZIP\n"
+START_TEXT = (
+    "👋 Привет! Я конвертирую файлы в Markdown.\n\n"
+    "📄 Поддерживаемые форматы:\n\n"
+    "• Документы: PDF, DOCX, DOC, ODT, RTF\n"
+    "• Презентации: PPTX, PPT, ODP\n"
+    "• Таблицы: XLSX, XLS, ODS, CSV\n"
+    "• Веб / разметка: HTML, HTM, XML, JSON\n"
+    "• Текст: TXT\n"
+    "• Изображения (OCR): JPG, PNG, GIF, BMP, TIFF\n"
+    "• Аудио (транскрипция): MP3, WAV\n"
+    "• Архивы: ZIP\n\n"
+    "Просто пришли мне файл или фото!"
 )
 
 converter = FileConverter()
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(
-        "👋 Привет\\! Я конвертирую файлы в *Markdown*\\.\n\n"
-        + SUPPORTED_FORMATS.replace(".", "\\.").replace("-", "\\-").replace("(", "\\(").replace(")", "\\)").replace("/", "\\/")
-        + "\nПросто пришли мне файл или фото\\!",
-        parse_mode="MarkdownV2",
-    )
+    await update.message.reply_text(START_TEXT)
 
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
-        "📖 *Инструкция:*\n\n"
-        "1\\. Отправь файл или фото прямо в чат\\.\n"
-        "2\\. Бот скачает и обработает его\\.\n"
-        "3\\. Если результат меньше 4096 символов — получишь текст прямо в чате\\.\n"
-        "4\\. Если больше — получишь готовый `.md` файл\\.\n\n"
-        f"⚠️ Максимальный размер файла: *{MAX_FILE_SIZE // 1024 // 1024} МБ*\\.\n\n"
-        + SUPPORTED_FORMATS.replace(".", "\\.").replace("-", "\\-").replace("(", "\\(").replace(")", "\\)").replace("/", "\\/")
+        "📖 Инструкция:\n\n"
+        "1. Отправь файл или фото прямо в чат.\n"
+        "2. Бот скачает и обработает его.\n"
+        "3. Если результат меньше 4096 символов — получишь текст прямо в чате.\n"
+        "4. Если больше — получишь готовый .md файл.\n\n"
+        f"⚠️ Максимальный размер файла: {MAX_FILE_SIZE // 1024 // 1024} МБ.\n\n"
+        + START_TEXT.split("📄")[1]
     )
-    await update.message.reply_text(text, parse_mode="MarkdownV2")
+    await update.message.reply_text(text)
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -88,9 +84,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await tg_file.download_to_drive(tmp_path)
 
         await progress_msg.edit_text("⏳ Конвертирую в Markdown...")
-        markdown = await asyncio.get_event_loop().run_in_executor(
-            None, converter.convert, tmp_path
-        )
+        loop = asyncio.get_running_loop()
+        markdown = await loop.run_in_executor(None, converter.convert, tmp_path)
 
         if len(markdown) <= 4096:
             await progress_msg.edit_text(markdown)
@@ -106,10 +101,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await progress_msg.delete()
     except Exception as e:
         logger.exception("Error processing document %s", original_name)
-        await progress_msg.edit_text(
-            f"❌ Произошла ошибка при обработке файла:\n`{e}`",
-            parse_mode="Markdown",
-        )
+        try:
+            await progress_msg.edit_text(f"❌ Ошибка при обработке файла:\n{e}")
+        except Exception:
+            pass
     finally:
         for path in (tmp_path, out_path):
             try:
@@ -134,9 +129,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await tg_file.download_to_drive(tmp_path)
 
         await progress_msg.edit_text("⏳ Распознаю текст (OCR)...")
-        markdown = await asyncio.get_event_loop().run_in_executor(
-            None, converter.convert, tmp_path
-        )
+        loop = asyncio.get_running_loop()
+        markdown = await loop.run_in_executor(None, converter.convert, tmp_path)
 
         if len(markdown) <= 4096:
             await progress_msg.edit_text(markdown)
@@ -152,10 +146,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await progress_msg.delete()
     except Exception as e:
         logger.exception("Error processing photo")
-        await progress_msg.edit_text(
-            f"❌ Произошла ошибка при обработке фото:\n`{e}`",
-            parse_mode="Markdown",
-        )
+        try:
+            await progress_msg.edit_text(f"❌ Ошибка при обработке фото:\n{e}")
+        except Exception:
+            pass
     finally:
         for path in (tmp_path, out_path):
             try:
