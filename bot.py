@@ -43,7 +43,6 @@ ALLOWED_EXTENSIONS = {
     ".xlsx", ".xls", ".ods", ".csv",
     ".html", ".htm", ".xml", ".json",
     ".txt", ".md", ".rst", ".tex", ".epub",
-    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp",
     ".zip",
 }
 
@@ -62,9 +61,8 @@ START_TEXT = (
     "• Таблицы: XLSX, XLS, ODS, CSV\n"
     "• Веб / разметка: HTML, HTM, XML, JSON\n"
     "• Текст: TXT\n"
-    "• Изображения (OCR): JPG, PNG, GIF, BMP, TIFF\n"
     "• Архивы: ZIP\n\n"
-    "Просто пришли мне файл или фото!"
+    "Просто пришли мне файл!"
 )
 
 converter = FileConverter()
@@ -119,7 +117,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = (
         "📖 Инструкция:\n\n"
-        "1. Отправь файл или фото прямо в чат.\n"
+        "1. Отправь файл прямо в чат.\n"
         "2. Бот скачает и обработает его.\n"
         "3. Получишь .md файл + превью первых 500 символов.\n\n"
         f"⚠️ Максимальный размер файла: {MAX_FILE_SIZE // 1024 // 1024} МБ.\n"
@@ -241,73 +239,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 pass
 
 
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user
-
-    if is_rate_limited(user.id):
-        logger.warning("Rate limit hit for user %s", user.id)
-        await update.message.reply_text("⏳ Слишком много запросов. Подожди минуту и попробуй снова.")
-        return
-
-    photo = update.message.photo[-1]
-    progress_msg = await update.message.reply_text("⏳ Конвертирую фото...")
-
-    Path(TEMP_DIR).mkdir(parents=True, exist_ok=True)
-    # photo.file_id comes from Telegram — safe, no traversal risk, but use Path for consistency
-    safe_photo_name = f"{photo.file_id}.jpg"
-    tmp_path = Path(TEMP_DIR) / safe_photo_name
-    out_path = Path(TEMP_DIR) / f"{photo.file_id}.md"
-    success = False
-
-    try:
-        await progress_msg.edit_text("⏳ Скачиваю фото...")
-        tg_file = await photo.get_file()
-        await tg_file.download_to_drive(tmp_path)
-
-        await progress_msg.edit_text("⏳ Распознаю текст (OCR)...")
-        loop = asyncio.get_running_loop()
-        markdown = await loop.run_in_executor(None, converter.convert, tmp_path)
-
-        Path(out_path).write_text(markdown, encoding="utf-8")
-        await progress_msg.edit_text("✅ Готово! Отправляю файл...")
-        with open(out_path, "rb") as f:
-            await update.message.reply_document(
-                document=f,
-                filename="photo.md",
-                caption="✅ OCR завершён.",
-            )
-        await progress_msg.delete()
-        await update.message.reply_text(
-            _build_preview(markdown),
-            reply_markup=CONVERT_MORE_KB,
-        )
-        success = True
-
-    except ConversionError as e:
-        logger.warning("ConversionError for photo %s: %s", photo.file_id, e)
-        try:
-            await progress_msg.edit_text(f"❌ {e}")
-        except Exception:
-            pass
-
-    except Exception as e:
-        logger.exception("Error processing photo")
-        try:
-            await progress_msg.edit_text(
-                "❌ Произошла внутренняя ошибка. Попробуй ещё раз или отправь другой файл."
-            )
-        except Exception:
-            pass
-
-    finally:
-        log_conversion(user.id, user.username or "", ".jpg", photo.file_size or 0, success)
-        for path in (tmp_path, out_path):
-            try:
-                if os.path.exists(path):
-                    os.remove(path)
-            except Exception:
-                pass
-
 
 async def post_init(application: Application) -> None:
     asyncio.create_task(cleanup_temp_files())
@@ -330,7 +261,6 @@ def main() -> None:
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
     if WEBHOOK_URL:
         print(f"Starting webhook on port {PORT}...")

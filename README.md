@@ -11,7 +11,6 @@ Telegram-бот для конвертации файлов в формат Markd
 | Таблицы | XLSX, XLS, ODS, CSV |
 | Веб / разметка | HTML, HTM, XML, JSON |
 | Текст | TXT |
-| Изображения (OCR) | JPG, PNG, GIF, BMP, TIFF |
 | Архивы | ZIP |
 
 ## Запуск локально
