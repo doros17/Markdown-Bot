@@ -4,6 +4,10 @@ import os
 
 logger = logging.getLogger(__name__)
 
+
+class ConversionError(Exception):
+    pass
+
 try:
     import magic
     _magic_available = True
@@ -62,11 +66,8 @@ class FileConverter:
         except Exception as e:
             logger.warning("pypandoc failed for %s: %s", file_path, e)
 
-        return (
-            f"❌ Не удалось конвертировать файл `{os.path.basename(file_path)}`.\n\n"
-            f"Тип файла: `{mime}` (`{ext}`)\n\n"
-            "Возможные причины:\n"
-            "- Формат не поддерживается\n"
-            "- Файл повреждён или защищён паролем\n"
-            "- Отсутствуют необходимые системные зависимости (pandoc, poppler-utils)\n"
+        raise ConversionError(
+            f"Не удалось конвертировать {os.path.basename(file_path)}. "
+            f"Тип: {mime} ({ext}). "
+            "Возможные причины: формат не поддерживается, файл повреждён или защищён паролем."
         )

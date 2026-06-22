@@ -99,3 +99,8 @@ docker compose up -d
 | `BOT_TOKEN` | — | Токен бота от @BotFather (обязательно) |
 | `MAX_FILE_SIZE_MB` | `50` | Максимальный размер файла в МБ |
 | `TEMP_DIR` | `/tmp/markdown_bot` | Папка для временных файлов |
+| `RATE_LIMIT_SECONDS` | `10` | Минимальный интервал между запросами одного пользователя |
+| `OWNER_ID` | `0` | Telegram user ID владельца (для команды /stats) |
+| `STATS_DB_PATH` | `/tmp/markdown_bot/stats.db` | Путь к SQLite базе статистики |
+| `WEBHOOK_URL` | — | URL вебхука (если задан — запуск через webhook, иначе polling) |
+| `PORT` | `8080` | Порт для webhook-режима |
