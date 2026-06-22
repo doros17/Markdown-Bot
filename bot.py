@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import time
+from collections import defaultdict
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -30,11 +31,25 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE_MB", "50")) * 1024 * 1024
 TEMP_DIR = os.getenv("TEMP_DIR", "/tmp/markdown_bot")
 RATE_LIMIT_SECONDS = int(os.getenv("RATE_LIMIT_SECONDS", "10"))
+RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "10"))
+RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
 OWNER_ID = int(os.getenv("OWNER_ID", "0"))
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
 PORT = int(os.getenv("PORT", "8080"))
 
+ALLOWED_EXTENSIONS = {
+    ".pdf", ".docx", ".doc", ".odt", ".rtf",
+    ".pptx", ".ppt", ".odp",
+    ".xlsx", ".xls", ".ods", ".csv",
+    ".html", ".htm", ".xml", ".json",
+    ".txt", ".md", ".rst", ".tex", ".epub",
+    ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp",
+    ".mp3", ".wav",
+    ".zip",
+}
+
 user_last_request: dict[int, float] = {}
+_rate_limit_store: dict[int, list[float]] = defaultdict(list)
 
 CONVERT_MORE_KB = InlineKeyboardMarkup(
     [[InlineKeyboardButton("🔄 Конвертировать ещё файл", callback_data="convert_more")]]
@@ -64,12 +79,24 @@ def _build_preview(markdown: str) -> str:
 
 
 async def check_rate_limit(user_id: int) -> bool:
+    """Simple per-user cooldown (legacy, used internally)."""
     now = time.time()
     last = user_last_request.get(user_id, 0)
     if now - last < RATE_LIMIT_SECONDS:
         return False
     user_last_request[user_id] = now
     return True
+
+
+def is_rate_limited(user_id: int) -> bool:
+    """Sliding-window rate limiter: max RATE_LIMIT_MAX requests per RATE_LIMIT_WINDOW seconds."""
+    now = time.time()
+    window_start = now - RATE_LIMIT_WINDOW
+    _rate_limit_store[user_id] = [t for t in _rate_limit_store[user_id] if t > window_start]
+    if len(_rate_limit_store[user_id]) >= RATE_LIMIT_MAX:
+        return True
+    _rate_limit_store[user_id].append(now)
+    return False
 
 
 async def cleanup_temp_files():
@@ -129,11 +156,24 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
-    if not await check_rate_limit(user.id):
-        await update.message.reply_text("⏳ Подожди немного перед отправкой следующего файла.")
+
+    if is_rate_limited(user.id):
+        logger.warning("Rate limit hit for user %s", user.id)
+        await update.message.reply_text("⏳ Слишком много запросов. Подожди минуту и попробуй снова.")
         return
 
     doc = update.message.document
+    original_name = doc.file_name or f"file_{doc.file_id}"
+    ext = Path(original_name).suffix.lower()
+
+    if ext not in ALLOWED_EXTENSIONS:
+        logger.warning("Unsupported extension blocked: %s", ext)
+        await update.message.reply_text(
+            f"❌ Формат {ext or 'без расширения'} не поддерживается.\n"
+            "Отправь /help чтобы увидеть список поддерживаемых форматов."
+        )
+        return
+
     if doc.file_size and doc.file_size > MAX_FILE_SIZE:
         await update.message.reply_text(
             f"❌ Файл слишком большой ({doc.file_size // 1024 // 1024} МБ). "
@@ -144,11 +184,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     progress_msg = await update.message.reply_text("⏳ Конвертирую...")
 
     Path(TEMP_DIR).mkdir(parents=True, exist_ok=True)
-    original_name = doc.file_name or f"file_{doc.file_id}"
-    tmp_path = os.path.join(TEMP_DIR, original_name)
-    stem = Path(original_name).stem
-    ext = Path(original_name).suffix.lower()
-    out_path = os.path.join(TEMP_DIR, stem + ".md")
+    # Path Traversal fix: .name strips any ../ or absolute path components
+    safe_name = Path(original_name).name
+    if safe_name != original_name:
+        logger.warning("Path traversal attempt: %s", original_name)
+    tmp_path = Path(TEMP_DIR) / safe_name
+    stem = Path(safe_name).stem
+    out_path = Path(TEMP_DIR) / (stem + ".md")
     success = False
 
     try:
@@ -203,16 +245,20 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
-    if not await check_rate_limit(user.id):
-        await update.message.reply_text("⏳ Подожди немного перед отправкой следующего файла.")
+
+    if is_rate_limited(user.id):
+        logger.warning("Rate limit hit for user %s", user.id)
+        await update.message.reply_text("⏳ Слишком много запросов. Подожди минуту и попробуй снова.")
         return
 
     photo = update.message.photo[-1]
     progress_msg = await update.message.reply_text("⏳ Конвертирую фото...")
 
     Path(TEMP_DIR).mkdir(parents=True, exist_ok=True)
-    tmp_path = os.path.join(TEMP_DIR, f"{photo.file_id}.jpg")
-    out_path = os.path.join(TEMP_DIR, f"{photo.file_id}.md")
+    # photo.file_id comes from Telegram — safe, no traversal risk, but use Path for consistency
+    safe_photo_name = f"{photo.file_id}.jpg"
+    tmp_path = Path(TEMP_DIR) / safe_photo_name
+    out_path = Path(TEMP_DIR) / f"{photo.file_id}.md"
     success = False
 
     try:
