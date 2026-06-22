@@ -1,0 +1,7 @@
+services:
+  bot:
+    build: .
+    env_file: .env
+    restart: unless-stopped
+    volumes:
+      - /tmp/markdown_bot:/tmp/markdown_bot

@@ -1,0 +1,5 @@
+markitdown[all]
+pypandoc
+python-telegram-bot==21.*
+python-dotenv
+python-magic
