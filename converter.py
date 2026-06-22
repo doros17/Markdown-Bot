@@ -66,6 +66,45 @@ class FileConverter:
         except Exception as e:
             logger.warning("pypandoc failed for %s: %s", file_path, e)
 
+        # Fallback: python-pptx for .pptx/.ppt
+        try:
+            if ext in (".pptx", ".ppt"):
+                from pptx import Presentation
+                prs = Presentation(file_path)
+                lines = []
+                for i, slide in enumerate(prs.slides, 1):
+                    lines.append(f"## Слайд {i}")
+                    for shape in slide.shapes:
+                        if hasattr(shape, "text") and shape.text.strip():
+                            lines.append(shape.text.strip())
+                    lines.append("")
+                text = "\n".join(lines)
+                if text.strip():
+                    logger.info("python-pptx succeeded for %s", file_path)
+                    return text
+        except Exception as e:
+            logger.warning("python-pptx failed for %s: %s", file_path, e)
+
+        # Fallback: openpyxl for .xlsx/.xls
+        try:
+            if ext in (".xlsx", ".xls"):
+                import openpyxl
+                wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+                lines = []
+                for sheet in wb.worksheets:
+                    lines.append(f"## {sheet.title}")
+                    for row in sheet.iter_rows(values_only=True):
+                        row_text = " | ".join(str(c) for c in row if c is not None)
+                        if row_text.strip():
+                            lines.append(row_text)
+                    lines.append("")
+                text = "\n".join(lines)
+                if text.strip():
+                    logger.info("openpyxl succeeded for %s", file_path)
+                    return text
+        except Exception as e:
+            logger.warning("openpyxl failed for %s: %s", file_path, e)
+
         raise ConversionError(
             f"Не удалось конвертировать {os.path.basename(file_path)}. "
             f"Тип: {mime} ({ext}). "

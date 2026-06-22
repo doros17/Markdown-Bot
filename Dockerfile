@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libmagic1 \
     poppler-utils \
     ffmpeg \
+    libreoffice \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
